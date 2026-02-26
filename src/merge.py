@@ -2,7 +2,7 @@
 # Run this after all source scrapers have completed (Mode A / retrospective only).
 #
 # Currently merges England-only sources.
-# Phase 2 (UCL project): add Scotland and Ireland sources here to retrain cross-jurisdiction.
+# Phase 2: add Scotland and Ireland sources here to retrain cross-jurisdiction.
 
 import pandas as pd
 from pathlib import Path
