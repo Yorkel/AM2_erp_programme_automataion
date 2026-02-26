@@ -208,31 +208,14 @@ __marimo__/
 
 
 # -----------------------------
-# Custom: Newsletter Project
+# Custom: EduAtlas Project
 # -----------------------------
 
-# Raw data (original newsletter HTML files)
-data_raw
-
-
-# Large or intermediate processed files
-*.csv
-*.xlsx
-
-# Optional: temporary working folders
-data/tmp/
-outputs/
-
-
-.env
-
-
-# Jupyter checkpoints
-.ipynb_checkpoints/
-
-# Python cache
-__pycache__/
+# All data folders (too large for git — outputs of scrapers)
+data/
 
 # Virtual environments
 venv/
+
+# Environment variables
 .env
