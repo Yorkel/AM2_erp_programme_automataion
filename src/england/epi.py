@@ -35,7 +35,6 @@ def extract_links(html):
     soup = BeautifulSoup(html, "html.parser")
 
     articles = soup.find_all("article")
-    print(f"🧪 DEBUG: found {len(articles)} <article> tags")
 
     links = []
     for art in articles:

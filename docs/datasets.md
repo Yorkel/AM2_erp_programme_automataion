@@ -18,10 +18,10 @@ data/
 │   │   └── schoolsweek.csv
 │   ├── scotland/           ← future (Phase 2)
 │   ├── ireland/            ← future (Phase 2)
-│   └── training_data.csv   ← merged corpus (all England sources combined)
+│   └── training_data_v1.csv ← merged corpus (versioned — see decisions.md §11)
 └── inference/
     ├── england/            ← weekly merged CSVs from Jan 2026
-    │   └── YYYY-MM-DD_YYYY-MM-DD.csv
+    │   └── weekNN_YYYY-MM-DD.csv  ← one file per week (week number + Friday date)
     ├── scotland/           ← Phase 1 test corpus + weekly (future)
     └── ireland/            ← Phase 1 test corpus + weekly (future)
 ```
@@ -99,26 +99,30 @@ Source: `https://schoolsweek.co.uk/news/`
 
 ## Merged training dataset
 
-### `training_data.csv`
-All England sources combined into a single file. Produced by running `python src/merge.py`.
+### `training_data_v1.csv`
+All England sources combined into a single versioned file. Produced by running `python src/merge.py --version N`.
 
 - **Coverage:** January 2023 – December 2025
 - **Country:** England only (`country = eng`)
 - **Deduplication:** URLs are deduplicated; any article appearing in multiple source CSVs is kept once
 - **Date cap:** Hard cap at 31 December 2025 — any articles scraped beyond this date are excluded
 - **GOV.UK filtering:** Only `core_education == True` rows are included; `institution_name` is set from `primary_org`
-- **Approximate size:** ~17MB, ~3,000–4,000 articles across all sources
+- **Versioning:** v1 used the old HTML-based Schools Week scraper (2,742 articles). v2 will use the WP API scraper (4,207 articles). See `docs/decisions.md` §11.
 
 ---
 
 ## Inference datasets
 
-### `data/inference/england/YYYY-MM-DD_YYYY-MM-DD.csv`
-One file per weekly run, covering all England sources for that week.
+### `data/inference/england/weekNN_YYYY-MM-DD.csv`
+One file per weekly run, named by **week number + Friday (end of week) date**. E.g. `week01_2026-01-15.csv` covers the week 9–15 Jan 2026. The `--week N` flag passed to `run.py` sets the week number; omitting it falls back to date-only naming.
 
 - **Coverage:** Jan 2026 onwards (weekly)
-- **Simulated batches:** Jan–Feb 2026 batches are created retrospectively before automated weekly runs begin
-- **Structure:** Same columns as `training_data.csv`
+- **Simulated batches:** Jan–Feb 2026 batches created retrospectively; automated weekly runs begin March 2026
+- **Structure:** Same columns as training data
+- **Boundary note:** No deduplication across weekly files — an article published late on a Friday may appear in the following week's batch. This is a deliberate methodological choice. See `docs/decisions.md` §12.
+
+### `docs/scrape_log.md`
+Auto-generated after every inference run. Contains a row per run with: timestamp, date range, output filename, per-source article counts, and total. Used to monitor pipeline health over time. Kept in `docs/` rather than `data/inference/` so it is tracked in git alongside other project documentation.
 
 ### `data/inference/scotland/` and `data/inference/ireland/`
 Future. Will contain:
@@ -126,3 +130,22 @@ Future. Will contain:
 - Weekly files from the point at which Scotland/Ireland scrapers are deployed
 
 These files are used to run the England-trained EduAtlas model on Scottish/Irish content as part of the cross-jurisdiction analysis.
+
+---
+
+## Production database — Supabase
+
+The local inference CSVs are intermediate outputs. The production data store is a Supabase (managed Postgres) database populated by `src/seed_supabase.py`.
+
+### `articles` table
+One row per article. Columns are populated in stages by different pipeline steps:
+
+| Stage | Columns populated | Script |
+|---|---|---|
+| Seed (this repo) | `url`, `title`, `date`, `text`, `source`, `country`, `type`, `institution_name`, `week_number`, `week_start`, `week_end` | `src/seed_supabase.py` |
+| Topic model | `dominant_topic`, `topic_probabilities` | FastAPI + joblib (Docker, separate service) |
+| Sentiment | `sentiment_score`, `sentiment_label` | Sentiment pipeline (separate) |
+
+`url` is the primary key — upsert behaviour prevents duplicates if `seed_supabase.py` is re-run.
+
+See `docs/decisions.md` §15 for full architecture rationale and the complete column schema.

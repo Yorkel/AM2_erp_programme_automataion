@@ -59,6 +59,10 @@ This project takes seriously the political assumptions embedded in AI text analy
 
 EduAtlas is designed to make these assumptions visible rather than hide them. It is presented to users as a tool that encodes particular choices, which can and should be interrogated — not as an objective classifier producing authoritative results.
 
+**Pipeline boundaries are not neutral:** The weekly inference batches impose an arbitrary time boundary (e.g. 9–15 January). An article published late on the last day of a window may appear in that week's batch or the following one depending on scraper timing. A system that reports "the top education topics this week" is not simply describing reality — it is constructing a particular slice of it. This boundary instability is preserved intentionally in the data rather than silently fixed, and is treated as a substantive observation about how automated pipelines shape the knowledge they produce.
+
+**Evaluation without ground truth:** The topic model is evaluated through internal metrics (coherence scores) and qualitative inspection rather than comparison to pre-defined correct labels. This is standard practice for unsupervised topic modelling, but it means the model's output categories are not validated against any external standard of what education policy "really" covers. The categories that emerge reflect patterns in the training corpus — which is itself a curated selection of institutional voices. This is stated explicitly rather than treated as a limitation to be minimised.
+
 ---
 
 ## 6. Downstream use
@@ -79,3 +83,5 @@ Neither use involves automated decision-making that affects individuals.
 - Source selection criteria and exclusions are documented in [decisions.md](decisions.md) and in the scraper code itself
 - The codebase is publicly available, allowing scrutiny of what data was collected and how
 - Limitations of the corpus will be stated explicitly in any publications or outputs that draw on it
+- Security practices and known limitations are documented in [security.md](security.md)
+- Claude Code is used to assist with code review and generation; all AI-generated code is reviewed before committing

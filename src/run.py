@@ -11,8 +11,8 @@
 #   Appends new articles to existing training CSVs. Run merge.py afterwards.
 #
 # MODE C — weekly inference (--since and --until after TRAINING_CUTOFF):
-#   python run.py --country eng --since 2026-01-06 --until 2026-01-12
-#   Writes one merged CSV to data/inference/england/2026-01-06_2026-01-12.csv
+#   python run.py --country eng --since 2026-01-09 --until 2026-01-15 --week 1
+#   Writes one merged CSV to data/inference/england/week01_2026-01-15.csv
 #
 # Scotland / Ireland (future — Phase 1, inference only):
 #   python run.py --country sco --since 2026-01-06 --until 2026-01-12
@@ -129,6 +129,13 @@ def parse_args():
              f"Articles up to {TRAINING_CUTOFF} go to data/training/; "
              "later articles go to data/inference/.",
     )
+    parser.add_argument(
+        "--week",
+        type=int,
+        default=None,
+        help="Week number to include in the inference output filename (e.g. --week 1 → week01_YYYY-MM-DD.csv). "
+             "Only used for inference runs.",
+    )
     return parser.parse_args()
 
 
@@ -148,6 +155,60 @@ def _enrich(rows, name):
     else:
         df["institution_name"] = meta["institution_name"]
     return df[[c for c in FINAL_COLS if c in df.columns]]
+
+
+def _write_scrape_log(inference_dir, since_date, until_date, filename, frames):
+    from datetime import datetime
+    log_path = ROOT / "docs" / "scrape_log.md"
+    run_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+    since_str = since_date.strftime("%Y-%m-%d")
+    until_str = until_date.strftime("%Y-%m-%d") if until_date else "present"
+    total = sum(len(f) for f in frames)
+
+    counts = {f["source"].iloc[0]: len(f) for f in frames if "source" in f.columns}
+
+    source_cols = ["schoolsweek", "gov", "epi", "nuffield", "fft", "fed"]
+    count_cells = " | ".join(str(counts.get(s, 0)) for s in source_cols)
+
+    row = f"| {run_time} | {since_str} → {until_str} | {filename} | {count_cells} | **{total}** |\n"
+
+    if not log_path.exists():
+        header = (
+            "# Inference Scrape Log\n\n"
+            "| Run time | Date range | File | schoolsweek | gov | epi | nuffield | fft | fed | Total |\n"
+            "|----------|------------|------|-------------|-----|-----|----------|-----|-----|-------|\n"
+        )
+        log_path.write_text(header + row)
+    else:
+        with open(log_path, "a") as f:
+            f.write(row)
+
+    print(f"📋 Scrape log updated → {log_path}")
+
+
+def _validate_inference(df, filename):
+    """Basic sanity checks on a merged inference CSV. Prints warnings but does not exit."""
+    issues = []
+
+    missing_cols = [c for c in FINAL_COLS if c not in df.columns]
+    if missing_cols:
+        issues.append(f"missing columns: {missing_cols}")
+
+    empty_text = df["text"].isna().sum() + (df["text"].str.strip() == "").sum()
+    if empty_text:
+        issues.append(f"{empty_text} rows have empty text")
+
+    if len(df) == 0:
+        issues.append("no articles — check scrapers")
+    elif len(df) < 5:
+        issues.append(f"only {len(df)} articles — unusually low, verify sources")
+
+    if issues:
+        print(f"\n⚠️  Validation warnings for {filename}:")
+        for issue in issues:
+            print(f"   • {issue}")
+    else:
+        print(f"✅ Validation passed: {len(df)} articles, all columns present, no empty text")
 
 
 def main():
@@ -220,14 +281,19 @@ def main():
         except Exception as e:
             print(f"❌ {name} failed: {e}")
 
-    # Write single merged inference CSV
+    # Write single merged inference CSV — named by week number + Friday (until_date)
     if not is_training and inference_frames:
-        since_str = since_date.strftime("%Y-%m-%d")
         until_str = until_date.strftime("%Y-%m-%d") if until_date else "present"
-        out = inference_dir / f"{since_str}_{until_str}.csv"
+        if args.week is not None:
+            filename_stem = f"week{args.week:02d}_{until_str}"
+        else:
+            filename_stem = until_str
+        out = inference_dir / f"{filename_stem}.csv"
         merged = pd.concat(inference_frames, ignore_index=True)
         merged.to_csv(out, index=False)
         print(f"\n✅ Wrote {len(merged)} articles to {out}")
+        _write_scrape_log(inference_dir, since_date, until_date, out.name, inference_frames)
+        _validate_inference(merged, out.name)
 
     print(f"\n{'='*50}")
     print(f"Done. Total articles scraped: {total}")

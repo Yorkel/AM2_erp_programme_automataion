@@ -1,9 +1,14 @@
-# Merges the per-source CSVs from data/training/ into a single training_data.csv.
+# Merges the per-source CSVs from data/training/ into a versioned training_data_vN.csv.
 # Run this after all source scrapers have completed (Mode A / retrospective only).
+#
+# Usage:
+#   python merge.py              → outputs training_data_v2.csv (increment manually)
+#   python merge.py --version 2  → outputs training_data_v2.csv
 #
 # Currently merges England-only sources.
 # Phase 2: add Scotland and Ireland sources here to retrain cross-jurisdiction.
 
+import argparse
 import pandas as pd
 from pathlib import Path
 from datetime import date
@@ -88,7 +93,17 @@ def load_gov():
     return df[FINAL_COLS]
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Merge per-source training CSVs")
+    parser.add_argument(
+        "--version", type=int, default=2,
+        help="Version number for output file (e.g. 2 → training_data_v2.csv)"
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     frames = []
 
     for source, config in SOURCES.items():
@@ -128,7 +143,7 @@ def main():
         print(f"🧹 Dropped {dupes} duplicate rows")
 
     TRAINING.mkdir(parents=True, exist_ok=True)
-    out = TRAINING / "training_data.csv"
+    out = TRAINING / f"training_data_v{args.version}.csv"
     full.to_csv(out, index=False)
 
     print(f"\n✅ Wrote {len(full)} rows to {out}")
