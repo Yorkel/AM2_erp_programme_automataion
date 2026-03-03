@@ -1,153 +1,93 @@
-# Dataset Descriptions
+# Datasets
 
-All data files are gitignored and stored locally only. The pipeline produces two categories of data: **training data** (Jan 2023 – Dec 2025, England only) and **inference data** (Jan 2026 onwards, all countries).
-
----
-
-## Folder structure
-
-```
-data/
-├── training/
-│   ├── england/            ← per-source CSVs for England
-│   │   ├── govuk_education.csv
-│   │   ├── epi.csv
-│   │   ├── nuffield.csv
-│   │   ├── fft_education_datalab.csv
-│   │   ├── fed.csv
-│   │   └── schoolsweek.csv
-│   ├── scotland/           ← future (Phase 2)
-│   ├── ireland/            ← future (Phase 2)
-│   └── training_data_v1.csv ← merged corpus (versioned — see decisions.md §11)
-└── inference/
-    ├── england/            ← weekly merged CSVs from Jan 2026
-    │   └── weekNN_YYYY-MM-DD.csv  ← one file per week (week number + Friday date)
-    ├── scotland/           ← Phase 1 test corpus + weekly (future)
-    └── ireland/            ← Phase 1 test corpus + weekly (future)
-```
+All datasets for the AM2 newsletter classification project.
 
 ---
 
-## Shared column schema
+## 1. Raw newsletters — HTML files
 
-All CSVs — both training and inference — share the same columns:
+**Location:** `data/raw/newsletters_html/`
 
-| Column | Type | Description |
+**What it is:** HTML exports of every ERP Weekly Newsletter issue, exported from the original Word/email format. Each file is one newsletter issue.
+
+**Coverage:** Issues 3–102 (some gaps — issues 1, 2, and a handful of others are missing). Filenames are inconsistent — mix of `ERP Newsletter ##.html`, `ESRC Education Research Programme Newsletter ##.html`, and some prefixed with `FW-`.
+
+**Volume:** 102 files
+
+**Status:** Raw, not yet processed beyond issue 87. Issues 88–102 need to be run through the extraction script.
+
+**How it was collected:** Exported from the team's email archive by the curators.
+
+---
+
+## 2. Processed newsletter items — CSV
+
+**Location:** `data/processed/newsletter_items_nov.csv`
+
+**What it is:** Structured extraction of all news items from the HTML newsletters. Each row is one article included in one newsletter issue. This is the primary training dataset for the classifier.
+
+**Coverage:** Issues 1–87, October 2023 – May 2025
+
+**Volume:** 1,668 rows
+
+**Columns:**
+
+| Column | Description |
+|---|---|
+| `id` | Row identifier |
+| `newsletter_number` | Issue number |
+| `issue_date` | Date of that newsletter issue |
+| `theme` | Section heading the article was placed under (curator-assigned label) |
+| `subtheme` | Sub-section heading where used (often empty in later issues) |
+| `title` | Article title |
+| `description` | Curator-written short description of the article |
+| `link` | URL of the source article |
+
+**How it was produced:** BeautifulSoup parser (`x_ERP_newsletter_automation/src/extract00_newsletters.py`) run on the HTML files, October 2025.
+
+**Known issues:**
+- **68 unique `theme` values** — many are label variants of the same section (e.g. "Political environment and key organisations" and "Political landscape & key organisations"), PI names parsed as section headers, and a few rows where the unsubscribe footer text was extracted as a theme
+- **Label normalisation needed** before use as training data — see table below
+- Issues 88–102 not yet extracted
+
+**Label normalisation map (draft):**
+
+| Raw label(s) | Normalised label | Keep for training? |
 |---|---|---|
-| `url` | string | Source article URL (unique identifier) |
-| `title` | string | Article title |
-| `date` | YYYY-MM-DD | Publication date |
-| `text` | string | Full article body text |
-| `source` | string | Source key — see values below |
-| `country` | string | Jurisdiction: `eng`, `sco`, `irl` |
-| `type` | string | Source type — see values below |
-| `institution_name` | string | Publishing institution name |
+| What matters in education? / What Matters in Education? | `what_matters` | Yes |
+| Political environment and key organisations / Political landscape & key organisations / Political landscape - the election / Political landscape across Four Nations & key organisations | `political_environment` | Yes |
+| Teacher recruitment, retention & development | `teacher_workforce` | Yes |
+| EdTech | `edtech` | Yes |
+| Research – Practice – Policy / Education, Policy & Practice | `research_practice_policy` | Yes |
+| Four Nations / Four Nations Landscape / Four Nations landscape / 4 Nations / 4 Nations & key organisations | `four_nations` | Yes |
+| Updates from the programme / Updates from the Programme / Programme news / Programme Update / Programme update / Update from the ESRC Education Research Programme / Update from UKRI / Updates from the ESRC / Updates from UKRI | `internal_programme` | No — always manual |
+| Updates from the projects / Update from the ERP projects / Updates from the ERP projects / Project news / News from the Projects / News from the projects / Update from the projects / Peer reviewed articles from the ERP projects / Peer reviewed publications from the ERP projects | `internal_projects` | No — always manual |
+| PI name strings (e.g. "Towards equity focused approaches to EdTech: a socio-technical perspective PI: Rebecca Eynon") | parsing noise / PI update | No — parsing artefact |
+| Unsubscribe footer text | parsing noise | No — parsing artefact |
+| Thematic roundup / Thematic Roundup / Relevant Research / Research / Other Research / Reports / Other Reports / DfE / EEF / ESRC / Calls for evidence / Opportunities / Opportunities for funding / Events / Relevant Events / Conferences / Seminar series topics / Seminar topics / Opportunities to blog | early-format labels | Review individually — some map to core sections |
 
-**`source` values:** `gov`, `epi`, `nuffield`, `fft`, `fed`, `schoolsweek`
-
-**`type` values:** `government`, `think_tank`, `ed_res_org`, `prof_body`, `ed_journalism`
-
----
-
-## Per-source descriptions (England)
-
-### `govuk_education.csv`
-GOV.UK news and communications tagged under the Education taxon, filtered to core domestic education policy bodies.
-
-**Included bodies:** Department for Education, Education and Skills Funding Agency, Ofsted, Ofqual, Office for Students, Standards and Testing Agency, Institute for Apprenticeships, Skills England
-
-**Excluded:** Publications where education is framed primarily as international relations, economic growth, sectoral skills development, or operational/administrative delivery (~350 articles). See `src/england/dfe.py` for the full exclusion rationale.
-
-Extra columns in the raw file (before merging): `from` (publishing organisation string), `core_education` (bool), `primary_org` (string). These are used by `merge.py` for filtering and are not carried into `training_data.csv`.
+**Estimated clean training set after normalisation:** ~1,200–1,400 rows across 6 sections.
 
 ---
 
-### `epi.csv`
-Research publications from the Education Policy Institute.
+## 3. External sources list
 
-Source: `https://epi.org.uk/publications-and-research/`
+**Location:** `x_ERP_newsletter_automation/docs/external_sources.md`
 
----
+**What it is:** The list of ~55 external sources the curators monitor weekly. Includes external organisations (think tanks, government bodies, unions, research orgs) and internal UCL/IOE sources.
 
-### `nuffield.csv`
-News and events from the Nuffield Foundation's education programme.
+**Structure:** Name, website URL, whether they send an email newsletter, whether the curator manually checks the site.
 
-Source: `https://www.nuffieldfoundation.org/news-and-events`
+**Status:** Maintained manually. Some entries are outdated (CAPE and IPPO are noted as closed).
 
----
-
-### `fft_education_datalab.csv`
-Blog posts from FFT Education Datalab.
-
-Source: `https://ffteducationdatalab.org.uk/blog/`
+**Use in the pipeline:** This list defines the sources the gathering tool needs to monitor. Some can be scraped via RSS or website crawl; others deliver content via email newsletter (harder to automate).
 
 ---
 
-### `fed.csv`
-News and resources from the Foundation for Educational Development.
+## 4. Newsletters not yet processed (issues 88–102)
 
-Source: `https://fed.education/news-resources/`
+**Location:** `data/raw/newsletters_html/` — files for issues 88–102 are present but not extracted
 
----
+**What is needed:** Run `x_ERP_newsletter_automation/src/extract00_newsletters.py` on the remaining files and append to `newsletter_items_nov.csv` (or create a new version).
 
-### `schoolsweek.csv`
-News articles from Schools Week. Scraper in progress.
-
-Source: `https://schoolsweek.co.uk/news/`
-
----
-
-## Merged training dataset
-
-### `training_data_v1.csv`
-All England sources combined into a single versioned file. Produced by running `python src/merge.py --version N`.
-
-- **Coverage:** January 2023 – December 2025
-- **Country:** England only (`country = eng`)
-- **Deduplication:** URLs are deduplicated; any article appearing in multiple source CSVs is kept once
-- **Date cap:** Hard cap at 31 December 2025 — any articles scraped beyond this date are excluded
-- **GOV.UK filtering:** Only `core_education == True` rows are included; `institution_name` is set from `primary_org`
-- **Versioning:** v1 used the old HTML-based Schools Week scraper (2,742 articles). v2 will use the WP API scraper (4,207 articles). See `docs/decisions.md` §11.
-
----
-
-## Inference datasets
-
-### `data/inference/england/weekNN_YYYY-MM-DD.csv`
-One file per weekly run, named by **week number + Friday (end of week) date**. E.g. `week01_2026-01-15.csv` covers the week 9–15 Jan 2026. The `--week N` flag passed to `run.py` sets the week number; omitting it falls back to date-only naming.
-
-- **Coverage:** Jan 2026 onwards (weekly)
-- **Simulated batches:** Jan–Feb 2026 batches created retrospectively; automated weekly runs begin March 2026
-- **Structure:** Same columns as training data
-- **Boundary note:** No deduplication across weekly files — an article published late on a Friday may appear in the following week's batch. This is a deliberate methodological choice. See `docs/decisions.md` §12.
-
-### `docs/scrape_log.md`
-Auto-generated after every inference run. Contains a row per run with: timestamp, date range, output filename, per-source article counts, and total. Used to monitor pipeline health over time. Kept in `docs/` rather than `data/inference/` so it is tracked in git alongside other project documentation.
-
-### `data/inference/scotland/` and `data/inference/ireland/`
-Future. Will contain:
-- A retrospective corpus (Jan 2025 – Dec 2025) as Phase 1 test data
-- Weekly files from the point at which Scotland/Ireland scrapers are deployed
-
-These files are used to run the England-trained EduAtlas model on Scottish/Irish content as part of the cross-jurisdiction analysis.
-
----
-
-## Production database — Supabase
-
-The local inference CSVs are intermediate outputs. The production data store is a Supabase (managed Postgres) database populated by `src/seed_supabase.py`.
-
-### `articles` table
-One row per article — both training and inference articles. 25 columns populated in stages:
-
-| Stage | Columns populated | Script |
-|---|---|---|
-| Seed — training | `url`, `dataset_type`, `title`, `article_date`, `article_text`, `source`, `country`, `article_type`, `preview`, `election_period` | `src/seed_supabase.py --source training` |
-| Seed — inference | same as above + `week_number`, `week_start`, `week_end` | `src/seed_supabase.py --source inference` |
-| Topic model | `topic_num`, `dominant_topic`, `dominant_topic_weight`, `topic_probabilities`, `text_clean`, `run_id` | FastAPI + joblib (Docker, separate service) |
-| Sentiment | `sentiment_score`, `sentiment_label` | Sentiment pipeline (separate) |
-| Contestability | `contestability_score` | Contestability pipeline (separate) |
-
-`url` is unique — upsert on `url` prevents duplicates if `seed_supabase.py` is re-run. `id` (UUID) is the primary key.
-
-See `docs/decisions.md` §15 for full architecture rationale and the complete column schema.
+**Estimated additional rows:** ~15 issues × ~12 items = ~180 more labelled examples, extending coverage to approximately February 2026.
