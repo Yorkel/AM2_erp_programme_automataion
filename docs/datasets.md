@@ -1,34 +1,34 @@
 # Datasets
 
-All datasets for the AM2 newsletter classification project.
+All data files are gitignored and stored locally.
+
+**Data pipeline:** raw HTML → extracted items → cleaned items → full articles
 
 ---
 
-## 1. Raw newsletters — HTML files
+## Stage 0 — Raw newsletters (HTML)
 
-**Location:** `data/raw/newsletters_html/`
+**Location:** `data/raw/newsletters_html/` (originally `data00_html_15.10.2025/`)
 
-**What it is:** HTML exports of every ERP Weekly Newsletter issue, exported from the original Word/email format. Each file is one newsletter issue.
+HTML exports of every ERP Weekly Newsletter issue, saved from email via Power Automate → OneDrive. Each file is one newsletter issue.
 
-**Coverage:** Issues 3–102 (some gaps — issues 1, 2, and a handful of others are missing). Filenames are inconsistent — mix of `ERP Newsletter ##.html`, `ESRC Education Research Programme Newsletter ##.html`, and some prefixed with `FW-`.
+**Coverage:** Issues 3–102 (issues 1, 2, and a handful of others are missing). Filenames are inconsistent — mix of `ERP Newsletter ##.html`, `ESRC Education Research Programme Newsletter ##.html`, and some prefixed with `FW-`.
 
-**Volume:** 102 files
+**Volume:** 102 files. Snapshot taken 15 October 2025; most recent issue at that point: newsletter_87 dated 10 October 2025.
 
-**Status:** Raw, not yet processed beyond issue 87. Issues 88–102 need to be run through the extraction script.
-
-**How it was collected:** Exported from the team's email archive by the curators.
+**Status:** Processed through issue 87. Issues 88–102 need to be run through the extraction script.
 
 ---
 
-## 2. Processed newsletter items — CSV
+## Stage 1 — Extracted newsletter items (CSV)
 
-**Location:** `data/processed/newsletter_items_nov.csv`
+**Location:** `data/processed/newsletter_items_nov.csv` (also `data01_newsletter_items/newsletter_items.csv`)
 
-**What it is:** Structured extraction of all news items from the HTML newsletters. Each row is one article included in one newsletter issue. This is the primary training dataset for the classifier.
+Structured extraction of all news items from the HTML newsletters. Each row is one article included in one newsletter issue. Produced by `src/extract00_newsletters.py` using BeautifulSoup.
 
 **Coverage:** Issues 1–87, October 2023 – May 2025
 
-**Volume:** 1,668 rows
+**Volume:** ~1,668 rows before deduplication
 
 **Columns:**
 
@@ -43,14 +43,12 @@ All datasets for the AM2 newsletter classification project.
 | `description` | Curator-written short description of the article |
 | `link` | URL of the source article |
 
-**How it was produced:** BeautifulSoup parser (`x_ERP_newsletter_automation/src/extract00_newsletters.py`) run on the HTML files, October 2025.
-
 **Known issues:**
-- **68 unique `theme` values** — many are label variants of the same section (e.g. "Political environment and key organisations" and "Political landscape & key organisations"), PI names parsed as section headers, and a few rows where the unsubscribe footer text was extracted as a theme
-- **Label normalisation needed** before use as training data — see table below
-- Issues 88–102 not yet extracted
+- **68 unique `theme` values** — many are label variants of the same section (e.g. "Political environment and key organisations" vs "Political landscape & key organisations"), PI names parsed as section headers, and some rows where the unsubscribe footer was extracted as a theme
+- Label normalisation needed before use as training data — see map below
+- Issues 88–102 not yet extracted (~180 additional rows estimated)
 
-**Label normalisation map (draft):**
+**Label normalisation map:**
 
 | Raw label(s) | Normalised label | Keep for training? |
 |---|---|---|
@@ -70,24 +68,50 @@ All datasets for the AM2 newsletter classification project.
 
 ---
 
-## 3. External sources list
+## Stage 2 — Cleaning intermediates
 
-**Location:** `x_ERP_newsletter_automation/docs/external_sources.md`
+**Location:** `data02_cleaning/`
 
-**What it is:** The list of ~55 external sources the curators monitor weekly. Includes external organisations (think tanks, government bodies, unions, research orgs) and internal UCL/IOE sources.
+Intermediate files from the cleaning and theme-mapping process (notebooks 0 and 1):
 
-**Structure:** Name, website URL, whether they send an email newsletter, whether the curator manually checks the site.
-
-**Status:** Maintained manually. Some entries are outdated (CAPE and IPPO are noted as closed).
-
-**Use in the pipeline:** This list defines the sources the gathering tool needs to monitor. Some can be scraped via RSS or website crawl; others deliver content via email newsletter (harder to automate).
+- `theme_subtheme_counts.csv` — frequency table of raw theme/subtheme strings
+- `unique_domains_programme_updates.csv` — unique domains from ERP project update items
+- `organisation_category_mapping.csv` — manual mapping of domains to organisation names and sector categories
 
 ---
 
-## 4. Newsletters not yet processed (issues 88–102)
+## Stage 3 — Cleaned newsletter items
 
-**Location:** `data/raw/newsletters_html/` — files for issues 88–102 are present but not extracted
+**Location:** `data03_newsletter_items_clean/`
 
-**What is needed:** Run `x_ERP_newsletter_automation/src/extract00_newsletters.py` on the remaining files and append to `newsletter_items_nov.csv` (or create a new version).
+- **`items_all_themes.csv`** — All newsletter items with standardised themes. ~1,192 rows after deduplication and cleaning.
+  Columns: `id`, `newsletter_number`, `issue_date`, `theme`, `subtheme`, `title`, `description`, `link`, `organisation`, `org_category`, `org_broad_category`, `text`, `text_character_count`, `text_word_count`
 
-**Estimated additional rows:** ~15 issues × ~12 items = ~180 more labelled examples, extending coverage to approximately February 2026.
+- **`items_final_themes.csv`** — Final cleaned dataset with organisations and sector categories assigned, combined text field, ready for analysis. ~903 rows.
+
+- **`programme_updates.csv`** — Subset filtered to ERP Project / Programme Updates theme only. Includes all enriched metadata and text fields.
+
+---
+
+## Stage 4 — Full articles (scraped)
+
+**Location:** `data04_full_articles_scraped/`
+
+Full article text scraped by following links from newsletter items. Produced by `src/extract01_full_article.py`.
+
+- **`newsletter_full_articles.csv`** — One row per unique article URL. 741 successfully scraped, 160 failed.
+  Columns: `article_id`, `link_canonical`, `domain`, `article_title`, `article_text`, `status`, `failure_reason`
+
+- **`newsletter_full_articles_with_items.csv`** — Merged: newsletter item metadata + full article text.
+
+- **`successfully_scraped.csv`** — Articles with `status == "ok"` only.
+
+- **`uk_government_links.csv`** — Extracted government URLs for reference.
+
+---
+
+## Outstanding work
+
+**Issues 88–102 not yet extracted.** Files are present in `data/raw/newsletters_html/` but have not been run through the extraction script. Estimated ~15 issues × ~12 items = ~180 additional labelled examples, extending coverage to approximately February 2026.
+
+To process: run `src/extract00_newsletters.py` on the remaining files and append to or create a new version of the items CSV.
